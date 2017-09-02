@@ -1,0 +1,114 @@
+---
+title: "chap2 都道県別のアイドル数の調査"
+output: html_document
+---
+
+# 都道府県別のアイドル数の調査
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(curl)
+library(tidyjson)
+library(ggplot2)
+
+imasparql <- function(q) {
+  endpoint <- "https://sparql.crssnky.xyz/spql/imas/query"
+  requrl <- paste(endpoint , "?query=" , URLencode(q, reserved=TRUE), sep="")
+  result <- curl_fetch_memory(requrl)
+  rtnarray <- rawToChar(result$content) %>% enter_object('results') %>% enter_object('bindings') %>% gather_array
+  return(rtnarray)
+}
+```
+
+## 都道府県別のアイドル数集計
+
+出身地情報付きでアイドル一覧を取得
+
+```{r}
+df <- imasparql("PREFIX imas: <https://sparql.crssnky.xyz/imasrdf/URIs/imas-schema.ttl#>
+PREFIX schema: <http://schema.org/>
+SELECT  (?nm as ?name) (?bp as ?pref)
+WHERE {
+  ?s schema:name ?nm;
+  schema:birthPlace ?bp.
+}
+") %>% spread_values(
+  name = jstring("name", "value"),
+  pref = jstring("pref", "value")
+ ) %>%
+ select("name", "pref")
+```
+
+出身地別にアイドル数を集計
+
+```{r}
+df_pref <- df %>% dplyr::group_by(pref) %>% dplyr::summarise(cnt = n())
+df_pref %>% dplyr::arrange(desc(cnt))
+```
+
+## 都道府県別人口との比較
+
+### 都道府県別人口の読み込み
+
+総務省統計局のサイトから、平成27年の都道府県別人口の情報を取得
+
+http://www.stat.go.jp/data/nihon/02.htm
+
+
+```{r}
+df_pop <- read.csv("population_pref.csv", sep = ",") %>% dplyr::select(c("pref","population"))
+df_pop %>% dplyr::arrange(desc(population))
+```
+
+
+### アイドル数と都道府県別人口との比較
+
+都道府県別人口とアイドル数の情報を結合
+
+```{r}
+df_prefpop <- dplyr::inner_join(df_pref, df_pop ,by="pref")
+df_prefpop
+```
+
+人口をx軸, アイドル数をy軸にプロット
+
+```{r}
+ggplot(
+  df_prefpop,
+  aes(
+    x = population,
+    y = cnt
+  )
+) + geom_point()
+```
+
+```{r}
+ggplot(
+  df_prefpop,
+  aes(
+    x = population,
+    y = cnt
+  )
+) + geom_point() + geom_smooth(
+  method = "lm", se= FALSE
+)
+```
+
+```{r}
+withidolratio <- df_prefpop %>% dplyr::mutate(idol_ratio=cnt/population)
+summary(withidolratio)
+```
+
+人口に対してアイドル数が少ない都道府県
+
+```{r}
+withidolratio %>% dplyr::arrange(idol_ratio) %>% head(15)
+```
+
+人口に対してアイドル数が少ない都道府県
+
+```{r}
+withidolratio %>% dplyr::arrange(desc(idol_ratio)) %>% head(15)
+```
+

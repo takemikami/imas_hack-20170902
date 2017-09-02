@@ -1,0 +1,119 @@
+---
+title: "chap1 Rからim@sparql使ってみる"
+output: html_document
+---
+
+# Rからim@sparql使ってみる
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(curl)
+library(tidyjson)
+library(ggplot2)
+
+imasparql <- function(q) {
+  endpoint <- "https://sparql.crssnky.xyz/spql/imas/query"
+  requrl <- paste(endpoint , "?query=" , URLencode(q, reserved=TRUE), sep="")
+  result <- curl_fetch_memory(requrl)
+  rtnarray <- rawToChar(result$content) %>% enter_object('results') %>% enter_object('bindings') %>% gather_array
+  return(rtnarray)
+}
+```
+
+## サンプルクエリの実行
+
+### アイドルごとの総選挙での全獲得票数
+
+im@sparqlサイトのサンプルクエリを実行してみます。
+
+see. https://sparql.crssnky.xyz/imas/
+
+アイドルごとの総選挙での全獲得票数.sparql
+
+```{r}
+df <- imasparql("PREFIX imas: <https://sparql.crssnky.xyz/imasrdf/URIs/imas-schema.ttl#>
+PREFIX schema: <http://schema.org/>
+SELECT  (SUM(?n) as ?sum) (Sample(?nm) as ?name)
+WHERE {
+  ?s schema:member ?o;
+     imas:VoteNumber ?n.
+  ?o schema:name ?nm
+}group by(?o) order by(?sum)
+") %>% spread_values(
+  name = jstring("name", "value"),
+  sum = jnumber("sum", "value")
+ ) %>%
+ select("name", "sum")
+```
+
+全獲得票数のサマリー
+
+```{r}
+summary(df)
+```
+
+## 属性別アイドルごとの総選挙での全獲得票数
+
+属性情報付きで獲得票数を取得します。
+
+```{r}
+df <- imasparql("PREFIX imas: <https://sparql.crssnky.xyz/imasrdf/URIs/imas-schema.ttl#>
+PREFIX schema: <http://schema.org/>
+SELECT  (SUM(?n) as ?sum) (Sample(?nm) as ?name) (Sample(?ty) as ?typ)
+WHERE {
+  ?s schema:member ?o;
+     imas:VoteNumber ?n.
+  ?o schema:name ?nm.
+  ?o imas:Type ?ty.
+}group by(?o) order by(?sum)
+") %>% spread_values(
+  name = jstring("name", "value"),
+  typ = jstring("typ", "value"),
+  sum = jnumber("sum", "value")
+ ) %>%
+ select("name", "typ","sum")
+```
+
+全獲得票数のサマリー
+
+```{r}
+summary(df)
+```
+
+属性ごとに得票数の分布を箱ひげ図で示す
+
+```{r}
+ggplot(
+  df,
+  aes(
+    x = typ,
+    y = sum
+  )
+) + geom_boxplot()
+```
+
+属性ごとの得票数分布をヒストグラムで示す
+
+```{r}
+ggplot(
+  df,
+  aes(
+    x = sum,
+    fill = typ
+  )
+) + geom_histogram(
+  alpha = 0.6
+) + scale_fill_manual(
+    values = c(
+      Cu  = "red",
+      Co  = "blue",
+      Pa  = "orange"
+    )
+)
+```
+
+```{r}
+df %>% dplyr::arrange(desc(sum)) %>% head(15)
+```
+
