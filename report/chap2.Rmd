@@ -106,7 +106,7 @@ summary(withidolratio)
 withidolratio %>% dplyr::arrange(idol_ratio) %>% head(15)
 ```
 
-人口に対してアイドル数が少ない都道府県
+人口に対してアイドル数が多い都道府県
 
 ```{r}
 withidolratio %>% dplyr::arrange(desc(idol_ratio)) %>% head(15)
