@@ -8,17 +8,9 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
-library(curl)
-library(tidyjson)
 library(ggplot2)
-
-imasparql <- function(q) {
-  endpoint <- "https://sparql.crssnky.xyz/spql/imas/query"
-  requrl <- paste(endpoint , "?query=" , URLencode(q, reserved=TRUE), sep="")
-  result <- curl_fetch_memory(requrl)
-  rtnarray <- rawToChar(result$content) %>% enter_object('results') %>% enter_object('bindings') %>% gather_array
-  return(rtnarray)
-}
+library(SPARQL)
+endpoint <- "https://sparql.crssnky.xyz/spql/imas/query"
 ```
 
 ## 都道府県別のアイドル数集計
@@ -26,18 +18,15 @@ imasparql <- function(q) {
 出身地情報付きでアイドル一覧を取得
 
 ```{r}
-df <- imasparql("PREFIX imas: <https://sparql.crssnky.xyz/imasrdf/URIs/imas-schema.ttl#>
+query <- "PREFIX imas: <https://sparql.crssnky.xyz/imasrdf/URIs/imas-schema.ttl#>
 PREFIX schema: <http://schema.org/>
 SELECT  (?nm as ?name) (?bp as ?pref)
 WHERE {
   ?s schema:name ?nm;
   schema:birthPlace ?bp.
 }
-") %>% spread_values(
-  name = jstring("name", "value"),
-  pref = jstring("pref", "value")
- ) %>%
- select("name", "pref")
+"
+df <- SPARQL(url=endpoint, query=query, curl_args=c('.encoding'='UTF8'))$result
 ```
 
 出身地別にアイドル数を集計
